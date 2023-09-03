@@ -103,7 +103,8 @@ BOOL CErrorDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
-
+	// 初始化
+	this->SetDlgItemTextW(IDC_STATIC1, TEXT("请输入错误代码"));
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
@@ -173,6 +174,12 @@ void CErrorDlg::OnBnClickedOk()
 {
 	// TODO: Add your control notification handler code here
 
+	// GetLastError获取的错误代码有可能是普通的函数，也可能是windows api的错误
+	// 有些函数不是windows的函数如socket的，有可能获取不到
+
+	// 定义一个接受其他类型错误
+	DWORD count = 0;
+
 	
 	TCHAR* str = NULL;
 	this->UpdateData(1);
@@ -181,13 +188,42 @@ void CErrorDlg::OnBnClickedOk()
 	GetDlgItem(IDC_EDIT1)->GetWindowTextW(value);
 	DWORD errCode = _tcstoul(value, NULL, 10);
 	// FORMAT_MESSAGE_ALLOCATE_BUFFER 这个参数可以自动分配内存，所以第6个参数可以写0
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS
+	count = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS
 		| FORMAT_MESSAGE_ALLOCATE_BUFFER,
 		NULL, errCode, NULL, (LPWSTR)&str, 0, NULL);
 
-	this->SetDlgItemTextW(IDC_STATIC1, str);
+	// 成功
+	if (count)
+	{
+		this->SetDlgItemTextW(IDC_STATIC1, str);
 
-	// 释放FORMAT_MESSAGE_ALLOCATE_BUFFER自动分配的内存
-	LocalFree(str);
+		// 释放FORMAT_MESSAGE_ALLOCATE_BUFFER自动分配的内存
+		LocalFree(str);
+	}
+	// 失败
+	else
+	{
+		// 失败的话不从系统中获取，从hmodule中获取,如这里从装入的socket dll中获取
+		HMODULE hmodule = LoadLibrary(L"msgnet.dll"); //装入网络消息的dll中获取
+		if (hmodule) // 如果成功的话
+		{
+			count = FormatMessage(FORMAT_MESSAGE_FROM_HMODULE | FORMAT_MESSAGE_IGNORE_INSERTS
+				| FORMAT_MESSAGE_ALLOCATE_BUFFER,
+				hmodule, errCode, NULL, (LPWSTR)&str, 0, NULL);
+			if (count)
+			{
+				this->SetDlgItemTextW(IDC_STATIC1, str);
+
+				// 释放FORMAT_MESSAGE_ALLOCATE_BUFFER自动分配的内存
+				LocalFree(str);
+			}
+			// 调用成功了才释放，否则不释放
+			FreeLibrary(hmodule);
+		}
+	}
+	if (count == 0)
+	{
+		this->SetDlgItemTextW(IDC_STATIC1, (LPCTSTR)L"没用找到错误代码信息");
+	}
 	
 }
